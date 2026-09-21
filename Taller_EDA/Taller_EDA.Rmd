@@ -14,22 +14,28 @@ geometry: margin=2cm
 header-includes:
   - \addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
   - \addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+  - \usepackage{fvextra}
+  - \fvset{breaklines=true,breakanywhere=true,fontsize=\small}
 ---
 
 ```{r setup, include=FALSE}
+# Opciones globales de los bloques de código (no se muestra el código en el
+# cuerpo del informe; queda documentado en el Anexo Técnico al final)
 knitr::opts_chunk$set(
   echo = FALSE, warning = FALSE, message = FALSE,
   fig.align = "center", fig.width = 5.6, fig.height = 3.2,
   dev = "cairo_pdf"
 )
 
-library(dplyr)
-library(ggplot2)
-library(knitr)
-library(e1071)
-library(tidyr)
-library(scales)
+# Paquetes utilizados en el análisis
+library(dplyr)    # manipulación de datos (filter, group_by, summarise, etc.)
+library(ggplot2)  # gráficos
+library(knitr)     # tablas (kable) y opciones de los chunks
+library(e1071)     # cálculo del coeficiente de asimetría (skewness)
+library(tidyr)     # utilidades de manejo de datos
+library(scales)    # formato de números y porcentajes en tablas/gráficos
 
+# Carga del conjunto de datos
 datos <- read.csv("data/ds_salaries.csv", stringsAsFactors = FALSE)
 ```
 
@@ -43,6 +49,7 @@ Inteligencia Artificial.
 ## Dimensiones, estructura y calidad de los datos
 
 ```{r act1-dim}
+# Dimensiones del dataset, conteo de NA por columna y filas duplicadas
 n_obs  <- nrow(datos)
 n_vars <- ncol(datos)
 na_por_col <- colSums(is.na(datos))
@@ -54,6 +61,7 @@ profesional) y **`r n_vars`** columnas. En la Tabla 1 se muestra el tipo que R
 le asignó a cada columna al importarla.
 
 ```{r act1-str}
+# Tipo de dato que R asignó a cada columna al importar el CSV
 resumen_vars <- data.frame(
   Variable = names(datos),
   Tipo_R   = sapply(datos, class),
@@ -107,6 +115,7 @@ información real, sobre todo en los grupos que ya tienen pocos datos (como
 ## Clasificación de variables
 
 ```{r act1-tabla-clasif}
+# Clasificación manual de las 4 variables solicitadas por tipo y escala
 tabla_clasif <- data.frame(
   Variable = c("experience_level", "company_size", "salary_in_usd", "remote_ratio"),
   Tipo = c("Cualitativa", "Cualitativa", "Cuantitativa", "Cuantitativa discreta / Cualitativa ordinal (según el uso)"),
@@ -165,6 +174,7 @@ confiables los cálculos de la Actividad 3.
 # Actividad 2: Tablas de Frecuencias y Visualización Cualitativa — Tamaño de Empresa
 
 ```{r act2-tabla}
+# Tabla de frecuencias absoluta, relativa y porcentual de company_size
 tabla_size <- datos %>%
   count(company_size) %>%
   mutate(
@@ -180,6 +190,7 @@ kable(tabla_size, col.names = c("Categoría", "Frecuencia absoluta", "Frecuencia
 ```
 
 ```{r act2-grafico, fig.cap="Distribución de registros por tamaño de empresa"}
+# Gráfico de barras de company_size con el conteo de cada categoría
 ggplot(datos %>% mutate(company_size = factor(company_size, levels = c("S","M","L"))),
        aes(x = company_size, fill = company_size)) +
   geom_bar() +
@@ -193,6 +204,7 @@ ggplot(datos %>% mutate(company_size = factor(company_size, levels = c("S","M","
 ```
 
 ```{r act2-moda}
+# Categoría con mayor frecuencia (moda) de company_size
 moda_size <- tabla_size$Categoria[which.max(tabla_size$Frec_absoluta)]
 pct_moda  <- tabla_size$Frec_porcentual[which.max(tabla_size$Frec_absoluta)]
 ```
@@ -215,6 +227,8 @@ mundo, porque no sabemos qué tan representativo es este conjunto de datos.
 ## Estadísticos por nivel de experiencia
 
 ```{r act3-tabla}
+# Media, mediana, varianza, desviación estándar, IQR, mínimo y máximo
+# del salario en USD, calculados por nivel de experiencia
 niveles <- c("EN", "MI", "SE", "EX")
 etiquetas <- c(EN = "Entry-level (EN)", MI = "Mid-level (MI)", SE = "Senior (SE)", EX = "Executive (EX)")
 
@@ -244,6 +258,8 @@ kable(tabla_exp_fmt,
 ```
 
 ```{r act3-extract}
+# Identifica el grupo con mayor media, mayor mediana y mayor/menor
+# desviación estándar, para citarlos en el texto de interpretación
 gpo_mayor_media <- tabla_exp$experience_level[which.max(tabla_exp$Media)]
 gpo_mayor_mediana <- tabla_exp$experience_level[which.max(tabla_exp$Mediana)]
 gpo_mayor_sd <- tabla_exp$experience_level[which.max(tabla_exp$Desv_Est)]
@@ -270,6 +286,7 @@ están relacionadas en esta muestra.
 ## Análisis de asimetría — Nivel Senior (SE)
 
 ```{r act3-asimetria}
+# Media, mediana y coeficiente de asimetría del salario para el nivel Senior
 se_sal <- datos$salary_in_usd[datos$experience_level == "SE"]
 media_se   <- mean(se_sal)
 mediana_se <- median(se_sal)
@@ -297,6 +314,7 @@ valores atípicos, algo que se revisa más adelante con el diagrama de cajas.
 ## Coeficiente de Variación
 
 ```{r act3-cv}
+# Coeficiente de Variación (CV = desviación estándar / media) por nivel
 tabla_cv <- tabla_exp %>%
   mutate(CV = round(Desv_Est / Media * 100, 2)) %>%
   select(experience_level, Media, Desv_Est, CV)
@@ -324,6 +342,7 @@ los salarios están un poco más "agrupados" alrededor de su propio promedio.
 ## Diagrama de cajas comparativo
 
 ```{r act3-boxplot, fig.cap="Boxplot comparativo del salario en USD por nivel de experiencia", fig.height=3.3}
+# Boxplot del salario por nivel de experiencia (medianas, dispersión, atípicos)
 ggplot(datos %>% mutate(experience_level = factor(experience_level, levels = niveles)),
        aes(x = experience_level, y = salary_in_usd, fill = experience_level)) +
   geom_boxplot(outlier.color = "firebrick", outlier.alpha = 0.5, outlier.size = 1.2) +
@@ -351,6 +370,8 @@ exactamente igual a cada persona en particular.
 ## Gráfico de cuantiles normales (QQ-Plot) — Nivel Senior
 
 ```{r act3-qqplot, fig.cap="QQ-Plot del salario en USD para el nivel Senior (SE)", fig.height=3.3}
+# QQ-Plot: compara los cuantiles muestrales del salario Senior contra
+# los cuantiles teóricos de una distribución Normal
 ggplot(data.frame(salario = se_sal), aes(sample = salario)) +
   stat_qq(color = "#3182BD", alpha = 0.6, size = 1.1) +
   stat_qq_line(color = "firebrick", linewidth = 0.7) +
@@ -376,6 +397,7 @@ de valores altos que se sale de lo esperado.
 ## Cuartiles y percentil 90
 
 ```{r act4-cuartiles}
+# Cuartiles (Q1, Q2, Q3) y percentil 90 del salario en USD
 q <- quantile(datos$salary_in_usd, probs = c(0.25, 0.5, 0.75, 0.90))
 kable(data.frame(Estadistico = c("Q1 (25%)", "Q2 / Mediana (50%)", "Q3 (75%)", "P90 (90%)"),
                   Valor_USD = comma(round(q,0))),
@@ -394,16 +416,19 @@ confirma con el histograma de abajo.
 ## Tabla de frecuencias por intervalos e histograma
 
 ```{r act4-intervalos}
+# Construye 7 intervalos de igual amplitud para el salario en USD
 n_clases <- 7
 rango <- range(datos$salary_in_usd)
 amplitud <- ceiling(diff(rango) / n_clases / 1000) * 1000
 limite_inf <- floor(rango[1] / 1000) * 1000
 cortes <- seq(limite_inf, limite_inf + amplitud * n_clases, by = amplitud)
 
+# Etiquetas legibles para cada intervalo (con separador de miles)
 etiquetas_int <- paste0(comma(head(cortes, -1)), " - ", comma(tail(cortes, -1)))
 datos$intervalo_salario <- cut(datos$salary_in_usd, breaks = cortes, include.lowest = TRUE,
                                 right = TRUE, labels = etiquetas_int)
 
+# Tabla de frecuencias por intervalo
 tabla_int <- datos %>%
   count(intervalo_salario) %>%
   mutate(
@@ -417,6 +442,7 @@ kable(tabla_int, col.names = c("Intervalo (USD)", "Frecuencia absoluta", "Frecue
 ```
 
 ```{r act4-histograma, fig.cap="Histograma del salario en USD con limites de clase marcados"}
+# Histograma del salario, usando los mismos cortes de la tabla de intervalos
 ggplot(datos, aes(x = salary_in_usd)) +
   geom_histogram(breaks = cortes, fill = "#4292C6", color = "white", linewidth = 0.3) +
   scale_x_continuous(breaks = cortes, labels = comma) +
@@ -441,6 +467,7 @@ llega a salarios bastante más altos que el resto.
 ## Umbral salarial junior: 80,000 USD
 
 ```{r act4-umbral}
+# Proporción de profesionales Entry-level (EN) con salario >= 80,000 USD
 en_df <- datos %>% filter(experience_level == "EN")
 n_en <- nrow(en_df)
 n_en_80k <- sum(en_df$salary_in_usd >= 80000)
@@ -485,6 +512,25 @@ todo el mercado laboral mundial.
 > lo que se observó en esta muestra de datos, no conclusiones definitivas
 > sobre causas ni sobre todo el mercado laboral.
 
+## Reflexión sobre el proceso de análisis
+
+Este análisis exploratorio permitió describir la estructura del conjunto de
+datos y las principales tendencias del salario por nivel de experiencia,
+usando herramientas estadísticas básicas (tablas de frecuencias, medidas de
+tendencia central y dispersión, asimetría y visualizaciones). El proceso
+también dejó claras algunas limitaciones que conviene tener presentes. En
+primer lugar, la calidad del análisis depende de decisiones tomadas en la
+etapa de auditoría de datos, como la de conservar los registros duplicados;
+otra decisión razonable habría podido llevar a resultados ligeramente
+distintos. En segundo lugar, al tratarse de un análisis exploratorio y no de
+un estudio con muestreo controlado, los resultados describen esta muestra en
+particular y no permiten generalizar directamente a todo el mercado laboral
+ni establecer relaciones de causa y efecto. Un análisis posterior podría
+complementar estos hallazgos con pruebas estadísticas inferenciales (por
+ejemplo, para confirmar si las diferencias salariales entre niveles de
+experiencia son significativas) y con variables adicionales del dataset,
+como el país o el cargo específico, que no se exploraron en este trabajo.
+
 # Actividad 6: Abstract
 
 **Abstract.** This report presents an exploratory data analysis (EDA) of the
@@ -514,3 +560,14 @@ experience level appears descriptively related to higher and slightly more
 concentrated salaries, while junior profiles show more relative variation in
 their pay. These findings are based only on this sample and should be read
 as exploratory, not as final or causal conclusions.
+
+\newpage
+
+# Anexo Técnico: Código en R {-}
+
+El código completo utilizado para el análisis se presenta a continuación,
+documentado con comentarios, con fines de reproducibilidad. Este mismo
+código, ejecutable, se encuentra en el archivo `Taller_EDA.Rmd`.
+
+```{r anexo-codigo, ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
