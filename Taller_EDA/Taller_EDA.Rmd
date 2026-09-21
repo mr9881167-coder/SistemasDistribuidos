@@ -3,6 +3,7 @@ title: "Taller de Análisis Exploratorio de Datos en R"
 subtitle: "Salarios en Ciencia de Datos e Inteligencia Artificial (ds_salaries.csv)"
 author: "Leandro Rojas -- ID: 883963"
 date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+lang: es
 output:
   pdf_document:
     toc: false
@@ -10,6 +11,9 @@ output:
     latex_engine: pdflatex
 fontsize: 11pt
 geometry: margin=2cm
+header-includes:
+  - \addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+  - \addto\captionsspanish{\renewcommand{\figurename}{Figura}}
 ---
 
 ```{r setup, include=FALSE}
@@ -56,7 +60,7 @@ resumen_vars <- data.frame(
   row.names = NULL
 )
 kable(resumen_vars, col.names = c("Variable", "Tipo en R"),
-      caption = "Tabla 1. Variables del dataset y tipo asignado por R")
+      caption = "Variables del dataset y tipo asignado por R")
 ```
 
 **Interpretación.** Hay columnas numéricas (`work_year`, `salary`,
@@ -73,7 +77,7 @@ como categorías ordenadas, hay que convertirlas explícitamente a factor.
 ```{r act1-na}
 kable(data.frame(Variable = names(na_por_col), NA_count = as.integer(na_por_col)),
       col.names = c("Variable", "Valores ausentes (NA)"),
-      caption = "Tabla 2. Conteo de valores ausentes (NA) por columna")
+      caption = "Conteo de valores ausentes (NA) por columna")
 ```
 
 **Interpretación.** Ninguna columna tiene valores vacíos (todas dan 0 en
@@ -109,7 +113,7 @@ tabla_clasif <- data.frame(
   Escala = c("Ordinal", "Ordinal", "Continua (de razón)", "Discreta / Ordinal"),
   row.names = NULL
 )
-kable(tabla_clasif, caption = "Tabla 3. Clasificación de variables por tipo y escala de medición")
+kable(tabla_clasif, caption = "Clasificación de variables por tipo y escala de medición")
 ```
 
 - **`experience_level`**: es una variable **cualitativa ordinal**. Sus
@@ -172,15 +176,16 @@ tabla_size <- datos %>%
   rename(Categoria = company_size, Frec_absoluta = n)
 
 kable(tabla_size, col.names = c("Categoría", "Frecuencia absoluta", "Frecuencia relativa", "Frecuencia porcentual"),
-      caption = "Tabla 4. Distribucion de frecuencias del tamano de empresa (S = Pequena, M = Mediana, L = Grande)")
+      caption = "Distribucion de frecuencias del tamano de empresa (S = Pequena, M = Mediana, L = Grande)")
 ```
 
-```{r act2-grafico, fig.cap="Figura 1. Distribución de registros por tamaño de empresa"}
+```{r act2-grafico, fig.cap="Distribución de registros por tamaño de empresa"}
 ggplot(datos %>% mutate(company_size = factor(company_size, levels = c("S","M","L"))),
        aes(x = company_size, fill = company_size)) +
   geom_bar() +
-  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.4, size = 3.3) +
+  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.6, size = 3.3) +
   scale_fill_manual(values = c("S" = "#8DA0CB", "M" = "#66C2A5", "L" = "#FC8D62")) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.12))) +
   labs(x = "Tamaño de la empresa", y = "Número de registros",
        title = "Profesionales de datos por tamaño de empresa") +
   theme_minimal(base_size = 11) +
@@ -235,7 +240,7 @@ tabla_exp_fmt <- tabla_exp %>%
 
 kable(tabla_exp_fmt,
       col.names = c("Nivel", "n", "Media", "Mediana", "Varianza", "Desv. Estándar", "IQR", "Mínimo", "Máximo"),
-      caption = "Tabla 5. Estadisticos descriptivos del salario en USD por nivel de experiencia")
+      caption = "Estadisticos descriptivos del salario en USD por nivel de experiencia")
 ```
 
 ```{r act3-extract}
@@ -297,7 +302,7 @@ tabla_cv <- tabla_exp %>%
   select(experience_level, Media, Desv_Est, CV)
 
 kable(tabla_cv, col.names = c("Nivel", "Media (USD)", "Desv. Est. (USD)", "CV (%)"),
-      caption = "Tabla 6. Coeficiente de Variación por nivel de experiencia",
+      caption = "Coeficiente de Variación por nivel de experiencia",
       format.args = list(big.mark = ","))
 
 gpo_mayor_cv <- tabla_cv$experience_level[which.max(tabla_cv$CV)]
@@ -318,7 +323,7 @@ los salarios están un poco más "agrupados" alrededor de su propio promedio.
 
 ## Diagrama de cajas comparativo
 
-```{r act3-boxplot, fig.cap="Figura 2. Boxplot comparativo del salario en USD por nivel de experiencia", fig.height=3.3}
+```{r act3-boxplot, fig.cap="Boxplot comparativo del salario en USD por nivel de experiencia", fig.height=3.3}
 ggplot(datos %>% mutate(experience_level = factor(experience_level, levels = niveles)),
        aes(x = experience_level, y = salary_in_usd, fill = experience_level)) +
   geom_boxplot(outlier.color = "firebrick", outlier.alpha = 0.5, outlier.size = 1.2) +
@@ -345,7 +350,7 @@ exactamente igual a cada persona en particular.
 
 ## Gráfico de cuantiles normales (QQ-Plot) — Nivel Senior
 
-```{r act3-qqplot, fig.cap="Figura 3. QQ-Plot del salario en USD para el nivel Senior (SE)", fig.height=3.3}
+```{r act3-qqplot, fig.cap="QQ-Plot del salario en USD para el nivel Senior (SE)", fig.height=3.3}
 ggplot(data.frame(salario = se_sal), aes(sample = salario)) +
   stat_qq(color = "#3182BD", alpha = 0.6, size = 1.1) +
   stat_qq_line(color = "firebrick", linewidth = 0.7) +
@@ -375,7 +380,7 @@ q <- quantile(datos$salary_in_usd, probs = c(0.25, 0.5, 0.75, 0.90))
 kable(data.frame(Estadistico = c("Q1 (25%)", "Q2 / Mediana (50%)", "Q3 (75%)", "P90 (90%)"),
                   Valor_USD = comma(round(q,0))),
       col.names = c("Estadístico", "Valor (USD)"),
-      caption = "Tabla 7. Cuartiles y percentil 90 del salario en USD (muestra completa)")
+      caption = "Cuartiles y percentil 90 del salario en USD (muestra completa)")
 ```
 
 **Interpretación.** El 25% de los profesionales de la muestra gana
@@ -408,10 +413,10 @@ tabla_int <- datos %>%
   rename(Intervalo = intervalo_salario, Frec_absoluta = n)
 
 kable(tabla_int, col.names = c("Intervalo (USD)", "Frecuencia absoluta", "Frecuencia relativa", "Porcentaje"),
-      caption = "Tabla 8. Distribucion de frecuencias por intervalos del salario en USD")
+      caption = "Distribucion de frecuencias por intervalos del salario en USD")
 ```
 
-```{r act4-histograma, fig.cap="Figura 4. Histograma del salario en USD con limites de clase marcados"}
+```{r act4-histograma, fig.cap="Histograma del salario en USD con limites de clase marcados"}
 ggplot(datos, aes(x = salary_in_usd)) +
   geom_histogram(breaks = cortes, fill = "#4292C6", color = "white", linewidth = 0.3) +
   scale_x_continuous(breaks = cortes, labels = comma) +
