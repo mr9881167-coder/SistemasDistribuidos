@@ -29,11 +29,10 @@ library(scales)
 datos <- read.csv("data/ds_salaries.csv", stringsAsFactors = FALSE)
 ```
 
-Este trabajo es mi primer acercamiento a un análisis exploratorio de datos
-completo. Para desarrollarlo me puse en el papel de una persona que apoya a
-una empresa de recursos humanos y que quiere entender un poco mejor cómo se
-comportan los salarios en el área de Ciencia de Datos e Inteligencia
-Artificial, usando el conjunto de datos `ds_salaries.csv`.
+Este informe presenta un análisis exploratorio del conjunto de datos
+`ds_salaries.csv`, con el objetivo de entender cómo se comportan los
+salarios y las condiciones laborales en el área de Ciencia de Datos e
+Inteligencia Artificial.
 
 # Actividad 1: Carga, Auditoría y Tipificación Estadística
 
@@ -78,9 +77,9 @@ kable(data.frame(Variable = names(na_por_col), NA_count = as.integer(na_por_col)
 ```
 
 **Interpretación.** Ninguna columna tiene valores vacíos (todas dan 0 en
-`NA`). Esto es una buena noticia porque significa que no toca decidir qué
-hacer con datos faltantes (por ejemplo, borrarlos o rellenarlos): se puede
-trabajar con el archivo completo tal como está.
+`NA`). Esto significa que no es necesario decidir qué hacer con datos
+faltantes (por ejemplo, borrarlos o rellenarlos): se puede trabajar con el
+archivo completo tal como está.
 
 ## Registros duplicados
 
@@ -88,17 +87,16 @@ Con la función `sum(duplicated(datos))` se identificaron **`r n_dup`** filas
 que están repetidas exactamente (cerca del `r round(n_dup/n_obs*100,1)`% del
 total de filas).
 
-**¿Qué significa esto?** Al principio pensé que tener tantas filas repetidas
-era un error del archivo, pero revisando con más calma me di cuenta de que no
-tiene que serlo. El dataset no tiene una columna de "ID" para cada persona;
-solo guarda características del empleo (año, nivel de experiencia, tipo de
-contrato, cargo, salario, moneda, país, modalidad de trabajo, tamaño de
-empresa, etc.). Entonces es totalmente posible que dos personas distintas
-tengan exactamente el mismo perfil laboral -por ejemplo, dos "Data
-Scientist" Senior de tiempo completo en Estados Unidos, con el mismo salario
-y el mismo tamaño de empresa- y eso generaría dos filas idénticas sin que
-nadie haya cometido un error al digitar los datos. Por esta razón decidí
-**no eliminar** los duplicados: si los borro corro el riesgo de perder
+**¿Qué significa esto?** Tener tantas filas repetidas podría parecer un
+error del archivo, pero no tiene que serlo. El dataset no tiene una columna
+de "ID" para cada persona; solo guarda características del empleo (año,
+nivel de experiencia, tipo de contrato, cargo, salario, moneda, país,
+modalidad de trabajo, tamaño de empresa, etc.). Por lo tanto, es posible que
+dos personas distintas tengan exactamente el mismo perfil laboral -por
+ejemplo, dos "Data Scientist" Senior de tiempo completo en Estados Unidos,
+con el mismo salario y el mismo tamaño de empresa- y eso generaría dos filas
+idénticas sin que exista ningún error de captura. Por esta razón se optó por
+**no eliminar** los duplicados: hacerlo implicaría el riesgo de perder
 información real, sobre todo en los grupos que ya tienen pocos datos (como
 `EX`).
 
@@ -117,8 +115,8 @@ kable(tabla_clasif, caption = "Tabla 3. Clasificación de variables por tipo y e
 - **`experience_level`**: es una variable **cualitativa ordinal**. Sus
   categorías (EN, MI, SE, EX) tienen un orden claro, de menos a más
   experiencia (Junior, Intermedio, Senior, Ejecutivo), pero no son números:
-  no puedo decir que la distancia entre EN y MI es "igual" a la distancia
-  entre SE y EX.
+  no se puede decir que la distancia entre EN y MI sea "igual" a la
+  distancia entre SE y EX.
 
 - **`company_size`**: también es **cualitativa ordinal**. Las categorías S,
   M y L representan tamaños de empresa que van de menor a mayor (menos de
@@ -142,21 +140,21 @@ kable(tabla_clasif, caption = "Tabla 3. Clasificación de variables por tipo y e
     100 = remoto total. Bajo esta lectura sí tiene sentido decir cuál
     modalidad es más común, pero no promediarlas.
 
-  En este trabajo decidí tratar `remote_ratio` como **categórica/ordinal**,
-  porque lo que me interesa es describir qué modalidad de trabajo es más
-  frecuente, no calcular un "porcentaje promedio de remotidad" que en la
+  En este informe se trata `remote_ratio` como **categórica/ordinal**,
+  porque el objetivo es describir qué modalidad de trabajo es más
+  frecuente, y no calcular un "porcentaje promedio de remotidad" que en la
   práctica no representa nada concreto.
 
 ## ¿Cómo está la calidad de los datos en general?
 
 En resumen, el archivo está bastante completo: no hay valores vacíos, así
-que no hubo que hacer ninguna limpieza por ese lado. Sí hay bastantes filas
-duplicadas, pero como expliqué antes, decidí conservarlas porque
-probablemente representan personas distintas con el mismo perfil laboral, y
-no un error al recolectar los datos. Si las hubiera borrado sin pensarlo,
-podría haber perdido información válida y afectar más que todo a los grupos
-que ya tienen pocos datos, como el de nivel Ejecutivo, lo cual habría hecho
-menos confiables los cálculos de la Actividad 3.
+que no fue necesaria ninguna limpieza por ese lado. Sí hay bastantes filas
+duplicadas, pero, como se explicó antes, se conservan porque probablemente
+representan personas distintas con el mismo perfil laboral, y no un error de
+recolección. Eliminarlas sin este análisis previo habría implicado el
+riesgo de perder información válida, afectando sobre todo a los grupos con
+menos datos, como el de nivel Ejecutivo, y esto habría hecho menos
+confiables los cálculos de la Actividad 3.
 
 \newpage
 
@@ -196,7 +194,7 @@ pct_moda  <- tabla_size$Frec_porcentual[which.max(tabla_size$Frec_absoluta)]
 
 **Interpretación.** La categoría **`r as.character(moda_size)` (empresa
 mediana)** es la que más se repite, con `r pct_moda` de los registros: esa es
-la **moda** de la variable `company_size`. Esto me dice que, en esta muestra,
+la **moda** de la variable `company_size`. Esto indica que, en esta muestra,
 la mayoría de los profesionales de datos trabajan en empresas medianas (entre
 50 y 250 empleados), tal vez porque son empresas de tecnología que ya crecieron
 lo suficiente como para tener un equipo de datos, pero que todavía no son una
@@ -255,14 +253,14 @@ desde `EN` hasta `EX`, sin saltos raros. El grupo
 **`r as.character(gpo_mayor_sd)`** es el que tiene la desviación estándar más
 alta, es decir, sus salarios son los que más varían entre sí; esto podría
 deberse a que dentro de "Ejecutivo" caben perfiles muy distintos (distintas
-industrias, países o tamaños de empresa). También noté que en todos los
-grupos el promedio es más alto que la mediana, lo que suele ser una señal de
-que hay algunos salarios muy altos que "jalan" el promedio hacia arriba sin
-mover tanto a la mediana (a esto se le llama asimetría positiva, y se
-analiza con más detalle en la siguiente sección). Todo esto son
+industrias, países o tamaños de empresa). También se observa que en todos
+los grupos el promedio es más alto que la mediana, lo que suele ser una
+señal de que hay algunos salarios muy altos que "jalan" el promedio hacia
+arriba sin mover tanto a la mediana (a esto se le llama asimetría positiva,
+y se analiza con más detalle en la siguiente sección). Todo esto son
 observaciones sobre los datos, no pruebas de que la experiencia "cause"
-directamente un salario más alto; solo puedo decir que ambas cosas están
-relacionadas en esta muestra.
+directamente un salario más alto; solo se puede afirmar que ambas variables
+están relacionadas en esta muestra.
 
 ## Análisis de asimetría — Nivel Senior (SE)
 
@@ -308,8 +306,8 @@ gpo_mayor_cv <- tabla_cv$experience_level[which.max(tabla_cv$CV)]
 **Interpretación.** El nivel **`r as.character(gpo_mayor_cv)`** es el que
 tiene el Coeficiente de Variación más alto, es decir, sus salarios varían
 más **en proporción a su propio promedio**, aunque en dólares la desviación
-estándar de otros grupos sea parecida o incluso mayor. Esto me ayudó a
-entender algo importante: comparar la desviación estándar en dólares entre
+estándar de otros grupos sea parecida o incluso mayor. Esto ilustra un
+punto importante: comparar la desviación estándar en dólares entre
 grupos que ganan montos muy distintos puede ser engañoso, porque la misma
 cantidad de dólares de diferencia "pesa" distinto según cuánto gane el
 grupo en promedio. El Coeficiente de Variación soluciona esto porque
@@ -339,8 +337,8 @@ y se va haciendo más ancha en `SE` y sobre todo en `EX`, lo que quiere decir
 que en los niveles más altos los salarios varían más entre sí. Hay varios
 puntos rojos fuera de los "bigotes" del gráfico, casi todos hacia arriba:
 esos son los valores atípicos, es decir, salarios muy por encima de lo
-normal para ese grupo, y coinciden con lo que ya había visto en el análisis
-de asimetría. Las cajas de `EN` y `EX` prácticamente no se cruzan, lo que
+normal para ese grupo, y coinciden con lo observado en el análisis de
+asimetría. Las cajas de `EN` y `EX` prácticamente no se cruzan, lo que
 confirma que en esta muestra sí hay una relación bastante clara entre nivel
 de experiencia y salario, aunque eso no significa que le vaya a pasar
 exactamente igual a cada persona en particular.
@@ -359,10 +357,10 @@ ggplot(data.frame(salario = se_sal), aes(sample = salario)) +
 **Interpretación.** Un QQ-Plot sirve para comparar los datos reales contra
 lo que se esperaría si siguieran una distribución Normal (la clásica "campana
 de Gauss"): si los puntos caen sobre la línea roja, la distribución se
-parece a una Normal. Acá los puntos siguen bastante bien la línea en la
+parece a una Normal. Aquí los puntos siguen bastante bien la línea en la
 parte de en medio, pero **se alejan hacia arriba en la parte derecha del
-gráfico**, es decir, para los salarios más altos. Esto confirma lo que ya
-había encontrado con el coeficiente de asimetría: los salarios del grupo
+gráfico**, es decir, para los salarios más altos. Esto confirma lo
+encontrado con el coeficiente de asimetría: los salarios del grupo
 Senior no siguen una distribución Normal perfecta, sino que tienen esa cola
 de valores altos que se sale de lo esperado.
 
@@ -383,8 +381,8 @@ kable(data.frame(Estadistico = c("Q1 (25%)", "Q2 / Mediana (50%)", "Q3 (75%)", "
 **Interpretación.** El 25% de los profesionales de la muestra gana
 `r comma(round(q[1],0))` USD al año o menos, mientras que el 10% que mejor
 gana (por encima del percentil 90) supera los `r comma(round(q[4],0))` USD.
-Me llamó la atención que la distancia entre Q3 y P90 es bastante más grande
-que la distancia entre Q1 y Q2: eso ya es una pista de que arriba hay
+La distancia entre Q3 y P90 es bastante más grande que la distancia entre
+Q1 y Q2, lo cual es una pista de que arriba hay
 salarios que se disparan bastante más que en la parte baja, algo que se
 confirma con el histograma de abajo.
 
@@ -463,9 +461,9 @@ todo el mercado laboral mundial.
 
 # Actividad 5: Conclusiones Ejecutivas
 
-> Al terminar este análisis, lo que más se nota es que el salario en el
-> sector de Ciencia de Datos e Inteligencia Artificial no se reparte de
-> forma pareja: la mayoría de los profesionales gana dentro de un rango
+> En síntesis, el salario en el sector de Ciencia de Datos e Inteligencia
+> Artificial no se reparte de forma pareja: la mayoría de los profesionales
+> gana dentro de un rango
 > más o menos parecido, pero hay un grupo más pequeño que gana bastante más
 > y que hace que el promedio general se vea más alto de lo que realmente
 > gana "la mayoría". El nivel de experiencia parece ser el factor que más se
@@ -484,13 +482,13 @@ todo el mercado laboral mundial.
 
 # Actividad 6: Abstract
 
-**Abstract.** This report presents a first exploratory data analysis (EDA)
-of the `ds_salaries.csv` dataset, which contains `r n_obs` records about
-annual compensation and working conditions for Data Science and Artificial
+**Abstract.** This report presents an exploratory data analysis (EDA) of the
+`ds_salaries.csv` dataset, which contains `r n_obs` records about annual
+compensation and working conditions for Data Science and Artificial
 Intelligence professionals, including experience level, employment type,
 remote-work ratio, company size, and salary standardized in US dollars. The
-purpose of this student exercise was to check the quality of the data,
-describe how salaries are distributed, compare compensation across
+purpose of this analysis was to check the quality of the data, describe how
+salaries are distributed, compare compensation across
 experience-level groups, and describe how company size and remote-work
 categories are distributed. The analysis used basic descriptive statistics
 in R: frequency tables, mean, median, variance, standard deviation,
@@ -509,5 +507,5 @@ professionals reach the 80,000 USD threshold defined as a "highly
 competitive junior salary" in this exercise. As a general conclusion,
 experience level appears descriptively related to higher and slightly more
 concentrated salaries, while junior profiles show more relative variation in
-their pay. These findings are based only on this sample and are meant as a
-first, exploratory look at the data, not as final or causal conclusions.
+their pay. These findings are based only on this sample and should be read
+as exploratory, not as final or causal conclusions.
