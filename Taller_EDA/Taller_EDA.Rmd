@@ -1,0 +1,539 @@
+---
+title: "Análisis Exploratorio de Datos en R: Dinámicas Salariales en Ciencia de Datos e Inteligencia Artificial"
+subtitle: "Informe de consultoría — dataset ds_salaries.csv"
+author: "Consultoría Analítica de Talento Humano"
+date: "`r format(Sys.Date(), '%d de %B de %Y')`"
+output:
+  pdf_document:
+    toc: false
+    number_sections: true
+    latex_engine: pdflatex
+fontsize: 10pt
+geometry: margin=1.8cm
+header-includes:
+  - \usepackage{fvextra}
+  - \fvset{breaklines=true,breakanywhere=true,fontsize=\small}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning = FALSE, message = FALSE,
+  fig.align = "center", fig.width = 5.6, fig.height = 3.2,
+  dev = "cairo_pdf"
+)
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(e1071)
+library(tidyr)
+library(scales)
+
+datos <- read.csv("data/ds_salaries.csv", stringsAsFactors = FALSE)
+```
+
+
+# Actividad 1: Carga, Auditoría y Tipificación Estadística
+
+## Dimensiones, estructura y calidad de los datos
+
+```{r act1-dim}
+n_obs  <- nrow(datos)
+n_vars <- ncol(datos)
+na_por_col <- colSums(is.na(datos))
+n_dup <- sum(duplicated(datos))
+```
+
+El conjunto de datos `ds_salaries.csv` contiene **`r n_obs`** observaciones (registros
+de profesionales) y **`r n_vars`** atributos. La Tabla 1 resume los tipos de variable
+tal como fueron importados por R.
+
+```{r act1-str}
+resumen_vars <- data.frame(
+  Variable = names(datos),
+  Tipo_R   = sapply(datos, class),
+  row.names = NULL
+)
+kable(resumen_vars, col.names = c("Variable", "Tipo en R"),
+      caption = "Tabla 1. Variables del dataset y tipo asignado por R")
+```
+
+**Interpretación.** El dataset combina variables numéricas (`work_year`, `salary`,
+`salary_in_usd`, `remote_ratio`) con variables de texto (`experience_level`,
+`employment_type`, `job_title`, `salary_currency`, `employee_residence`,
+`company_location`, `company_size`), que en R se importan por defecto como tipo
+`character` aunque conceptualmente corresponden a variables categóricas. Esta
+distinción es relevante porque, para el análisis estadístico, dichas columnas deberán
+tratarse explícitamente como factores.
+
+## Valores ausentes
+
+```{r act1-na}
+kable(data.frame(Variable = names(na_por_col), NA_count = as.integer(na_por_col)),
+      col.names = c("Variable", "Valores ausentes (NA)"),
+      caption = "Tabla 2. Conteo de valores ausentes (NA) por columna")
+```
+
+**Interpretación.** Ninguna de las `r n_vars` columnas presenta valores ausentes
+(`NA = 0` en todos los casos). Esto indica que el conjunto de datos está
+completo en términos de registro, por lo que no es necesario aplicar técnicas de
+imputación o eliminación de observaciones por falta de información antes de
+continuar con el análisis. Esta completitud favorece la confiabilidad de los
+estadísticos descriptivos que se calcularán en las secciones siguientes, ya que no
+existe riesgo de sesgo por datos faltantes.
+
+## Registros duplicados
+
+Se identificaron **`r n_dup`** filas exactamente duplicadas (aproximadamente
+`r round(n_dup/n_obs*100,1)`% del total), mediante `sum(duplicated(datos))`.
+
+**Análisis conceptual.** Una fila duplicada en este conjunto de datos **no
+constituye necesariamente un error de captura o un defecto de calidad**. El dataset
+no incluye un identificador único de empleado; registra combinaciones de
+atributos laborales (año, nivel de experiencia, tipo de contrato, cargo, salario,
+moneda, país de residencia, modalidad remota, país de la empresa y tamaño de la
+empresa). Es perfectamente plausible que **dos o más profesionales distintos**
+compartan exactamente el mismo perfil —por ejemplo, dos "Data Scientist" Senior,
+tiempo completo, en Estados Unidos, con el mismo salario reportado y el mismo
+tamaño de empresa—, generando filas idénticas sin que exista redundancia de
+captura. Por esta razón, la eliminación automática de duplicados no es
+recomendable en este contexto: podría eliminar observaciones legítimas y sesgar
+las distribuciones salariales, en especial las de los grupos con menor tamaño
+muestral (por ejemplo, `EX`). En este informe los registros duplicados se
+**conservan**, dado que representan información potencialmente válida sobre la
+estructura del mercado laboral y no evidencia contundente de error.
+
+## Clasificación formal de variables
+
+```{r act1-tabla-clasif}
+tabla_clasif <- data.frame(
+  Variable = c("experience_level", "company_size", "salary_in_usd", "remote_ratio"),
+  Tipo = c("Cualitativa", "Cualitativa", "Cuantitativa", "Cuantitativa discreta / Cualitativa ordinal (según objetivo)"),
+  Escala = c("Ordinal", "Ordinal", "De razón (continua)", "De razón discreta / Ordinal"),
+  row.names = NULL
+)
+kable(tabla_clasif, caption = "Tabla 3. Clasificación de variables por tipo y escala de medición")
+```
+
+- **`experience_level`**: variable **cualitativa ordinal**. Sus categorías (EN, MI,
+  SE, EX) representan niveles jerárquicos crecientes de experiencia profesional
+  (Junior → Intermedio → Senior → Ejecutivo). Existe un orden natural entre las
+  categorías, pero las distancias entre niveles no son necesariamente iguales ni
+  cuantificables, por lo que no puede tratarse como variable numérica.
+
+- **`company_size`**: variable **cualitativa ordinal**. Las categorías S, M y L
+  corresponden a rangos crecientes de tamaño de plantilla (< 50, 50–250, > 250
+  empleados). Aunque el criterio de clasificación subyacente es numérico (número de
+  empleados), la variable reportada en el dataset es una categoría ordenada, no el
+  conteo exacto.
+
+- **`salary_in_usd`**: variable **cuantitativa continua de razón**. Representa una
+  magnitud monetaria estandarizada en dólares, admite todas las operaciones
+  aritméticas (sumas, promedios, razones) y posee un cero absoluto con sentido
+  (ausencia de ingreso). Es la variable central del análisis de tendencia central,
+  dispersión y forma.
+
+- **`remote_ratio`**: variable con doble lectura posible, que debe resolverse según
+  el objetivo del análisis:
+  - Como **variable cuantitativa discreta**, toma únicamente los valores 0, 50 y
+    100, que podrían interpretarse como puntos en una escala numérica de
+    porcentaje de trabajo remoto. Sin embargo, no existen valores intermedios
+    observados (por ejemplo 25 o 75), por lo que tratarla como continua no está
+    respaldado por los datos, y el promedio de estos tres valores no tiene una
+    interpretación operativa directa (un "58.3% remoto promedio" no describe un
+    esquema real de trabajo).
+  - Como **variable categórica ordinal**, los tres valores representan grados
+    cualitativos de modalidad laboral: 0 = presencial, 50 = híbrido, 100 =
+    remoto total. Bajo esta lectura tiene sentido ordenar las categorías, pero no
+    promediarlas.
+
+  Para los propósitos de este informe —caracterizar **esquemas** de trabajo
+  remoto y compararlos frente a otras variables cualitativas— se adopta la
+  **interpretación ordinal/categórica**, ya que el objetivo del análisis (Actividad
+  2 y discusión general) es describir la distribución de modalidades de trabajo, no
+  calcular un promedio continuo de "grado de remotidad".
+
+## Evaluación general de calidad
+
+En síntesis, el conjunto de datos presenta una calidad estructural adecuada para el
+análisis exploratorio: no existen valores ausentes que exijan imputación, y aunque
+existe un número considerable de filas duplicadas, estas se interpretan como
+coincidencias plausibles de perfil laboral y no como errores de recolección. De
+haberse decidido eliminarlas sin este análisis conceptual previo, se habría corrido
+el riesgo de descartar observaciones válidas y de introducir un sesgo de
+subrepresentación en los grupos de experiencia con menor tamaño muestral (`EN`,
+`EX`), afectando la precisión de las medidas de tendencia central y dispersión que
+se calculan en la Actividad 3.
+
+
+# Actividad 2: Tablas de Frecuencias y Visualización Cualitativa — Tamaño de Empresa
+
+```{r act2-tabla}
+tabla_size <- datos %>%
+  count(company_size) %>%
+  mutate(
+    company_size = factor(company_size, levels = c("S", "M", "L")),
+    Frec_relativa = n / sum(n),
+    Frec_porcentual = percent(Frec_relativa, accuracy = 0.1)
+  ) %>%
+  arrange(company_size) %>%
+  rename(Categoria = company_size, Frec_absoluta = n)
+
+kable(tabla_size, col.names = c("Categoría", "Frecuencia absoluta", "Frecuencia relativa", "Frecuencia porcentual"),
+      caption = "Tabla 4. Distribucion de frecuencias del tamano de empresa (S = Pequena, M = Mediana, L = Grande)")
+```
+
+```{r act2-grafico, fig.cap="Figura 1. Distribución de registros por tamaño de empresa"}
+ggplot(datos %>% mutate(company_size = factor(company_size, levels = c("S","M","L"))),
+       aes(x = company_size, fill = company_size)) +
+  geom_bar() +
+  geom_text(stat = "count", aes(label = after_stat(count)), vjust = -0.4, size = 3.3) +
+  scale_fill_manual(values = c("S" = "#8DA0CB", "M" = "#66C2A5", "L" = "#FC8D62")) +
+  labs(x = "Tamaño de la empresa", y = "Número de registros",
+       title = "Profesionales de datos por tamaño de empresa") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")
+```
+
+```{r act2-moda}
+moda_size <- tabla_size$Categoria[which.max(tabla_size$Frec_absoluta)]
+pct_moda  <- tabla_size$Frec_porcentual[which.max(tabla_size$Frec_absoluta)]
+```
+
+**Interpretación.** La categoría **`r as.character(moda_size)` (empresa mediana)**
+concentra la mayor cantidad de registros (`r pct_moda` de la muestra), constituyendo
+la **moda** de la variable `company_size`. En términos de mercado laboral, esto
+sugiere que, **dentro de esta muestra**, la contratación de perfiles de Ciencia de
+Datos e IA está fuertemente concentrada en organizaciones de tamaño intermedio
+(50–250 empleados), posiblemente empresas tecnológicas en fase de escalamiento que
+ya cuentan con equipos de datos estructurados pero no operan con la magnitud de una
+gran corporación. Las empresas pequeñas (`S`) representan la categoría menos
+frecuente. Es importante distinguir entre la **frecuencia observada en esta
+muestra** —que refleja el sesgo de las fuentes que alimentaron el dataset— y una
+afirmación general sobre la totalidad del mercado laboral mundial, la cual no puede
+sostenerse únicamente con esta evidencia.
+
+
+# Actividad 3: Medidas de Tendencia Central, Dispersión y Forma
+
+## Estadísticos por nivel de experiencia
+
+```{r act3-tabla}
+niveles <- c("EN", "MI", "SE", "EX")
+etiquetas <- c(EN = "Entry-level (EN)", MI = "Mid-level (MI)", SE = "Senior (SE)", EX = "Executive (EX)")
+
+tabla_exp <- datos %>%
+  filter(experience_level %in% niveles) %>%
+  group_by(experience_level) %>%
+  summarise(
+    n = n(),
+    Media = mean(salary_in_usd),
+    Mediana = median(salary_in_usd),
+    Varianza = var(salary_in_usd),
+    Desv_Est = sd(salary_in_usd),
+    IQR = IQR(salary_in_usd),
+    Minimo = min(salary_in_usd),
+    Maximo = max(salary_in_usd)
+  ) %>%
+  mutate(experience_level = factor(experience_level, levels = niveles)) %>%
+  arrange(experience_level)
+
+tabla_exp_fmt <- tabla_exp %>%
+  mutate(across(c(Media, Mediana, Varianza, Desv_Est, IQR, Minimo, Maximo),
+                ~ comma(round(.x, 0))))
+
+kable(tabla_exp_fmt,
+      col.names = c("Nivel", "n", "Media", "Mediana", "Varianza", "Desv. Estándar", "IQR", "Mínimo", "Máximo"),
+      caption = "Tabla 5. Estadisticos descriptivos del salario en USD por nivel de experiencia")
+```
+
+```{r act3-extract}
+gpo_mayor_media <- tabla_exp$experience_level[which.max(tabla_exp$Media)]
+gpo_mayor_mediana <- tabla_exp$experience_level[which.max(tabla_exp$Mediana)]
+gpo_mayor_sd <- tabla_exp$experience_level[which.max(tabla_exp$Desv_Est)]
+gpo_menor_sd <- tabla_exp$experience_level[which.min(tabla_exp$Desv_Est)]
+```
+
+**Interpretación.** El grupo **`r as.character(gpo_mayor_media)`** presenta el mayor
+salario promedio y también la mayor mediana, lo cual es consistente con la
+jerarquía profesional esperada: a mayor experiencia y responsabilidad, mayor
+remuneración. Los cuatro grupos muestran una progresión creciente y monótona de
+media y mediana desde `EN` hasta `EX`. El grupo **`r as.character(gpo_mayor_sd)`**
+presenta la mayor dispersión absoluta (desviación estándar), lo que indica una
+mayor heterogeneidad salarial dentro de ese nivel —posiblemente asociada a
+diferencias de especialización, ubicación geográfica o tipo de empresa entre
+perfiles ejecutivos—. En todos los grupos la media es superior a la mediana, lo
+cual es un primer indicio de **asimetría positiva** (cola derecha más larga,
+producto de salarios excepcionalmente altos que "jalan" el promedio hacia arriba
+sin desplazar igual la mediana). Estas lecturas deben entenderse como
+**posibles explicaciones o hipótesis** sobre la estructura del mercado laboral de
+datos, y no como relaciones causales demostradas por el conjunto de datos: el
+dataset no permite establecer, por ejemplo, que la experiencia *cause*
+directamente el incremento salarial, solo que ambas variables están asociadas en
+esta muestra.
+
+## Análisis de asimetría — Nivel Senior (SE)
+
+```{r act3-asimetria}
+se_sal <- datos$salary_in_usd[datos$experience_level == "SE"]
+media_se   <- mean(se_sal)
+mediana_se <- median(se_sal)
+skew_se    <- skewness(se_sal, type = 2)
+```
+
+Para el nivel Senior: media = `r comma(round(media_se,0))` USD, mediana =
+`r comma(round(mediana_se,0))` USD, coeficiente de asimetría (Fisher-Pearson) =
+`r round(skew_se, 3)`.
+
+**Interpretación.** La media (`r comma(round(media_se,0))`) es superior a la
+mediana (`r comma(round(mediana_se,0))`), y el coeficiente de asimetría es
+positivo (`r round(skew_se,3)`), lo que en conjunto constituye evidencia de una
+**distribución con asimetría positiva (a la derecha)** para los salarios del
+grupo Senior. Esto significa que, aunque la mayoría de los profesionales Senior se
+agrupan en un rango salarial moderado, existe un subconjunto de observaciones con
+remuneraciones considerablemente más altas que alargan la cola derecha de la
+distribución y elevan el promedio por encima del valor típico (mediana). Una
+posible explicación —planteada como **hipótesis**, no como relación causal— es que
+esta asimetría podría estar asociada con diferencias de cargo dentro de la misma
+etiqueta "Senior" (por ejemplo, "Senior Data Scientist" frente a "Staff/Principal"
+en la práctica), con la especialización técnica, con el mercado geográfico de la
+empresa contratante, o con compensaciones excepcionalmente altas en un número
+reducido de casos (posibles valores atípicos, analizados en la sección de
+boxplots).
+
+## Coeficiente de Variación
+
+```{r act3-cv}
+tabla_cv <- tabla_exp %>%
+  mutate(CV = round(Desv_Est / Media * 100, 2)) %>%
+  select(experience_level, Media, Desv_Est, CV)
+
+kable(tabla_cv, col.names = c("Nivel", "Media (USD)", "Desv. Est. (USD)", "CV (%)"),
+      caption = "Tabla 6. Coeficiente de Variación por nivel de experiencia",
+      format.args = list(big.mark = ","))
+
+gpo_mayor_cv <- tabla_cv$experience_level[which.max(tabla_cv$CV)]
+```
+
+**Interpretación.** El nivel **`r as.character(gpo_mayor_cv)`** presenta el mayor
+Coeficiente de Variación, es decir, la **mayor variabilidad relativa** de ingresos
+respecto a su propio promedio, a pesar de que en términos absolutos otros grupos
+puedan tener una desviación estándar en dólares numéricamente mayor o similar. Esto
+ilustra por qué **la desviación estándar absoluta, por sí sola, no es una medida
+adecuada para comparar la dispersión entre grupos cuyo nivel salarial promedio
+difiere sustancialmente**: un mismo número de dólares de desviación representa una
+proporción muy distinta del ingreso típico según el grupo. El CV, al normalizar la
+desviación estándar por la media, permite una comparación justa de la variabilidad
+relativa entre `EN`, `MI`, `SE` y `EX`, evidenciando que los niveles de menor
+experiencia tienden a mostrar mayor heterogeneidad relativa en sus ingresos que los
+niveles más senior, cuyos salarios están más "acotados" proporcionalmente en torno
+a su propio promedio.
+
+## Diagrama de cajas comparativo
+
+```{r act3-boxplot, fig.cap="Figura 2. Boxplot comparativo del salario en USD por nivel de experiencia", fig.height=3.3}
+ggplot(datos %>% mutate(experience_level = factor(experience_level, levels = niveles)),
+       aes(x = experience_level, y = salary_in_usd, fill = experience_level)) +
+  geom_boxplot(outlier.color = "firebrick", outlier.alpha = 0.5, outlier.size = 1.2) +
+  scale_y_continuous(labels = comma) +
+  scale_fill_brewer(palette = "Blues") +
+  labs(x = "Nivel de experiencia", y = "Salario anual (USD)",
+       title = "Salario en USD según nivel de experiencia") +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "none")
+```
+
+**Interpretación.** El boxplot confirma la progresión ascendente de las
+**medianas** (línea central de cada caja) desde `EN` hasta `EX`. La **amplitud de
+las cajas** (rango intercuartílico) es más estrecha en `EN` y se amplía
+progresivamente hacia `SE` y, sobre todo, `EX`, lo que indica mayor dispersión
+absoluta del 50% central de los datos en los niveles más altos. Se observan
+**valores atípicos** (puntos fuera de los bigotes) en varios de los grupos,
+principalmente en la cola superior, consistentes con salarios excepcionalmente
+altos que ya se habían identificado en el análisis de asimetría. Las diferencias
+entre grupos son claras y consistentes: no hay solapamiento sustancial entre las
+cajas de `EN` y `EX`, lo que refuerza la asociación entre nivel de experiencia y
+nivel salarial observada en esta muestra, sin que ello implique una relación
+determinística para un individuo en particular.
+
+## Gráfico de cuantiles normales (QQ-Plot) — Nivel Senior
+
+```{r act3-qqplot, fig.cap="Figura 3. QQ-Plot del salario en USD para el nivel Senior (SE)", fig.height=3.3}
+ggplot(data.frame(salario = se_sal), aes(sample = salario)) +
+  stat_qq(color = "#3182BD", alpha = 0.6, size = 1.1) +
+  stat_qq_line(color = "firebrick", linewidth = 0.7) +
+  labs(x = "Cuantiles teóricos (Normal)", y = "Cuantiles muestrales (USD)",
+       title = "QQ-Plot: salario Senior (SE) vs. distribución Normal") +
+  theme_minimal(base_size = 11)
+```
+
+**Interpretación.** En un QQ-Plot, si los datos siguieran una distribución
+aproximadamente normal, los puntos se alinearían sobre la recta de referencia. En
+este caso, los puntos se ajustan razonablemente a la recta en la región central de
+la distribución, pero se **desvían hacia arriba en la cola derecha** (valores
+muestrales superiores a los teóricos para los cuantiles más altos), lo cual es
+consistente con la asimetría positiva ya detectada mediante el coeficiente de
+asimetría. Esta desviación visual confirma que la distribución de salarios del
+grupo Senior **no es exactamente normal**: presenta una cola derecha más pesada de
+lo que predeciría una distribución Normal, coherente con la presencia de un
+subconjunto de compensaciones excepcionalmente altas.
+
+
+# Actividad 4: Distribución por Intervalos y Análisis de Umbral Salarial
+
+## Cuartiles y percentil 90
+
+```{r act4-cuartiles}
+q <- quantile(datos$salary_in_usd, probs = c(0.25, 0.5, 0.75, 0.90))
+kable(data.frame(Estadistico = c("Q1 (25%)", "Q2 / Mediana (50%)", "Q3 (75%)", "P90 (90%)"),
+                  Valor_USD = comma(round(q,0))),
+      col.names = c("Estadístico", "Valor (USD)"),
+      caption = "Tabla 7. Cuartiles y percentil 90 del salario en USD (muestra completa)")
+```
+
+**Interpretación.** El 25% de los profesionales de la muestra gana
+`r comma(round(q[1],0))` USD o menos anuales, mientras que el 10% superior (por
+encima de P90) supera los `r comma(round(q[4],0))` USD. La distancia entre Q3 y
+P90 es notablemente mayor que la distancia entre Q1 y Q2, lo que anticipa una cola
+derecha extendida en la distribución global de salarios, tal como se confirmará en
+el histograma siguiente.
+
+## Tabla de frecuencias por intervalos e histograma
+
+```{r act4-intervalos}
+n_clases <- 7
+rango <- range(datos$salary_in_usd)
+amplitud <- ceiling(diff(rango) / n_clases / 1000) * 1000
+limite_inf <- floor(rango[1] / 1000) * 1000
+cortes <- seq(limite_inf, limite_inf + amplitud * n_clases, by = amplitud)
+
+etiquetas_int <- paste0(comma(head(cortes, -1)), " - ", comma(tail(cortes, -1)))
+datos$intervalo_salario <- cut(datos$salary_in_usd, breaks = cortes, include.lowest = TRUE,
+                                right = TRUE, labels = etiquetas_int)
+
+tabla_int <- datos %>%
+  count(intervalo_salario) %>%
+  mutate(
+    Frec_relativa = n / sum(n),
+    Porcentaje = percent(Frec_relativa, accuracy = 0.1)
+  ) %>%
+  rename(Intervalo = intervalo_salario, Frec_absoluta = n)
+
+kable(tabla_int, col.names = c("Intervalo (USD)", "Frecuencia absoluta", "Frecuencia relativa", "Porcentaje"),
+      caption = "Tabla 8. Distribucion de frecuencias por intervalos del salario en USD")
+```
+
+```{r act4-histograma, fig.cap="Figura 4. Histograma del salario en USD con limites de clase marcados"}
+ggplot(datos, aes(x = salary_in_usd)) +
+  geom_histogram(breaks = cortes, fill = "#4292C6", color = "white", linewidth = 0.3) +
+  scale_x_continuous(breaks = cortes, labels = comma) +
+  labs(x = "Salario anual (USD)", y = "Frecuencia absoluta",
+       title = "Histograma del salario anual en USD") +
+  theme_minimal(base_size = 10) +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1))
+```
+
+**Interpretación.** El histograma muestra una distribución **unimodal y con
+asimetría positiva**: la mayor concentración de observaciones se ubica en los
+intervalos intermedios-bajos, y la frecuencia decrece progresivamente hacia los
+intervalos de salarios más altos, formando una cola derecha extendida pero con
+pocas observaciones. Esta forma es coherente con lo observado en la Actividad 3
+para el subgrupo Senior, y con el hecho de que la media global
+(`r comma(round(mean(datos$salary_in_usd),0))` USD) sea superior a la mediana
+global (`r comma(round(median(datos$salary_in_usd),0))` USD). Desde una
+perspectiva de mercado, esto sugiere que la mayoría de los profesionales del sector
+se concentra en un rango salarial "estándar", mientras que un grupo minoritario
+—probablemente perfiles muy senior, altamente especializados o ubicados en
+mercados de compensación elevada— accede a remuneraciones sustancialmente
+superiores al resto.
+
+## Umbral salarial junior: 80,000 USD
+
+```{r act4-umbral}
+en_df <- datos %>% filter(experience_level == "EN")
+n_en <- nrow(en_df)
+n_en_80k <- sum(en_df$salary_in_usd >= 80000)
+pct_en_80k <- n_en_80k / n_en
+```
+
+De los **`r n_en`** profesionales de nivel Entry-level (EN) en la muestra,
+**`r n_en_80k`** (**`r percent(pct_en_80k, accuracy=0.1)`**) alcanzan o superan el
+umbral de 80,000 USD anuales definido por la firma consultora como "salario junior
+altamente competitivo".
+
+**Interpretación.** Dentro de esta muestra, alcanzar un salario junior de al menos
+80,000 USD es una situación **relativamente minoritaria pero no marginal**:
+representa poco menos de la mitad de los profesionales Entry-level observados. Esto
+sugiere que, si bien existe un grupo considerable de profesionales junior bien
+remunerados, la mayoría de este segmento se ubica por debajo de dicho umbral. Esta
+conclusión debe limitarse estrictamente a la evidencia disponible en el conjunto de
+datos: el dataset no es necesariamente representativo de todo el mercado laboral
+global de Ciencia de Datos e IA (puede sobre-representar ciertos países, empresas o
+plataformas de origen de los datos), por lo que esta cifra no debe generalizarse
+como un hecho universal del mercado laboral mundial, sino como un hallazgo
+descriptivo específico de esta muestra.
+
+
+# Actividad 5: Conclusiones Ejecutivas
+
+> **Síntesis gerencial.** El análisis evidencia que la remuneración en el sector de
+> Ciencia de Datos e Inteligencia Artificial sigue una distribución con **asimetría
+> positiva**: la mayoría de los profesionales se agrupa en un rango salarial
+> moderado, mientras un segmento minoritario percibe compensaciones
+> considerablemente más altas, elevando el promedio por encima del valor típico. El
+> **nivel de experiencia** emerge como el factor descriptivo más asociado a la
+> remuneración: los salarios promedio y medianos crecen de forma sostenida desde
+> perfiles junior hasta ejecutivos, aunque la variabilidad relativa (coeficiente de
+> variación) es mayor en los niveles menos senior, lo que sugiere trayectorias
+> salariales más heterogéneas al inicio de la carrera. Para una firma de
+> consultoría en talento humano, esto implica que las estrategias de compensación
+> **no deberían basarse únicamente en promedios**, sino considerar la dispersión y
+> la posible presencia de valores atípicos dentro de cada nivel al diseñar bandas
+> salariales competitivas. Asimismo, el hecho de que solo una fracción de los
+> perfiles junior supere el umbral de alta competitividad salarial sugiere una
+> oportunidad de asesoría diferenciada para organizaciones que buscan atraer talento
+> temprano con ofertas por encima del promedio del segmento. Estas lecturas se
+> presentan como hallazgos descriptivos de la muestra analizada y como hipótesis
+> orientadoras para estudios posteriores, no como relaciones causales
+> comprobadas.
+
+
+# Actividad 6: Abstract
+
+**Abstract.** This report presents an exploratory data analysis (EDA) of the
+`ds_salaries.csv` dataset, which contains `r n_obs` records describing annual
+compensation and working conditions for Data Science and Artificial Intelligence
+professionals, including experience level, employment type, remote-work ratio,
+company size, and salary standardized in US dollars. The purpose of the analysis
+was to audit data quality, characterize the distribution of `salary_in_usd`,
+compare compensation across experience-level groups, and describe the
+distribution of company sizes and remote-work schemes, adopting the perspective
+of an analytical consultant advising multinational organizations on compensation
+strategy. The study applied univariate descriptive techniques in R, including
+frequency tables, measures of central tendency, dispersion and shape (mean,
+median, variance, standard deviation, interquartile range, coefficient of
+variation, and skewness), boxplots, a normal Q-Q plot, and an interval-based
+frequency distribution with histogram. Results show that the dataset contains no
+missing values but a substantial number of exact duplicate rows, interpreted as
+plausible coincidences of professional profile rather than collection errors.
+Salaries increase monotonically with experience level, from Entry-level to
+Executive, while relative variability (coefficient of variation) is highest among
+less senior groups. The overall salary distribution, and particularly the Senior
+subgroup, exhibits positive skewness, confirmed jointly by the mean-median
+comparison, the skewness coefficient, and the Q-Q plot. Only a minority of
+Entry-level professionals reach the 80,000 USD "highly competitive junior
+salary" threshold defined for this exercise. The general conclusion is that
+experience level is descriptively associated with higher and more concentrated
+compensation, while junior and mid-level roles show greater relative salary
+heterogeneity, insights that should inform, but not by themselves determine,
+compensation benchmarking decisions for this sample.
+
+\newpage
+
+# Anexo Técnico: Código Fuente Completo
+
+El código R completo utilizado para generar este informe se presenta a
+continuación con fines de reproducibilidad.
+
+```{r anexo-codigo, ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```
